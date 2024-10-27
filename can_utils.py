@@ -57,7 +57,7 @@ def get_can_bitrate(channel_name: str) -> str:
                                 capture_output=True, text=True)
         output = result.stdout
         for line in output.split('\n'):
-            print(line)
+            # print(line)
             if 'bitrate' in line:
                 return int(line.split('bitrate ')[1].split(' ')[0])
         return "Unknown"
