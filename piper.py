@@ -34,10 +34,12 @@ def _gripper_m_to_can(gripper_m) -> int:
 
 class Piper:
 
-  def __init__(self, can_name:str = "can0") -> None:
+  def __init__(self, can_name:str = "can0", leader_setup=False) -> None:
     self._can_channel_name = can_name
     self._can_bus = None
     self._expected_bitrate = 1000000
+
+    self._leader_setup = leader_setup
 
     self._check_can_info()
 
@@ -157,6 +159,7 @@ class Piper:
     can_id:int = rx_message.arbitration_id
     can_data:bytearray = rx_message.data
 
+    # print(hex(can_id))
     match can_id:
       # arm and gripper joint angle feedback
       case CanIDPiper.ARM_STATUS_FEEDBACK.value:
@@ -189,6 +192,25 @@ class Piper:
         self._rate_ctrl = struct.unpack("B", can_data[2:3])[0]
         self._mit_mode_read = struct.unpack("B", can_data[3:4])[0]
         self._residence_time = struct.unpack("B", can_data[0:1])[0]
+
+    if self._leader_setup:
+      match can_id:
+        case CanIDPiper.ARM_JOINT_CTRL_12.value:
+          self._sensed[0] = _joint_can_to_rad(struct.unpack(">l", can_data[:4])[0])
+          self._sensed[1] = _joint_can_to_rad(struct.unpack(">l", can_data[4:8])[0])
+          self._sensed_valid |= 1
+        case CanIDPiper.ARM_JOINT_CTRL_34.value:
+          self._sensed[2] = _joint_can_to_rad(struct.unpack(">l", can_data[:4])[0])
+          self._sensed[3] = _joint_can_to_rad(struct.unpack(">l", can_data[4:8])[0])
+          self._sensed_valid |= 2
+        case CanIDPiper.ARM_JOINT_CTRL_56.value:
+          self._sensed[4] = _joint_can_to_rad(struct.unpack(">l", can_data[:4])[0])
+          self._sensed[5] = _joint_can_to_rad(struct.unpack(">l", can_data[4:8])[0])
+          self._sensed_valid |= 4
+        case CanIDPiper.ARM_GRIPPER_CTRL.value:
+          self._sensed[6] = _gripper_can_to_m(struct.unpack(">l", can_data[:4])[0])
+          self._gripper_effort = struct.unpack(">h", can_data[4:6])[0]
+          self._gripper_status = struct.unpack("B", can_data[6:7])[0]
 
   def _send_message(self, arbitration_id, data):
     message = can.Message(channel=self._can_channel_name,

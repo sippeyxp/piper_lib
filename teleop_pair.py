@@ -18,7 +18,7 @@ def ensure_joints_synced(piper_lead, piper):
   n = 0
   nn = 0
   while True:
-    joints = piper_head.sensed()
+    joints = piper_lead.sensed()
     if nn % 20 == 0:
       print("pollo", " ".join(f"{i:.2f}" for i in joints))
     if np.all(np.abs(joints[:3]) < 0.3) and np.all(np.abs(joints[3:6]) < 0.5):
@@ -32,15 +32,19 @@ def ensure_joints_synced(piper_lead, piper):
 
   print("pollo zeroed, starting in 2 sec")
   for i in range(100):
-    joints = pollo.get_reading()
+    joints = piper_lead.sensed()
     piper.command_joints(joints * i / 100)
     time.sleep(0.01)
 
 
 def main(argv):
   # pollo = PolloReceiver()
-  piper_leader = piper_lib.Piper("can1")
-  piper = piper_lib.Piper("can0")
+  piper_lead = piper_lib.Piper("can_leader", leader_setup=True)
+  piper_lead.start()
+  print("lead started")
+
+
+  piper = piper_lib.Piper("can_follower")
   piper.start()
   piper.enable_motion()
   piper.command_joints(np.zeros(7))
