@@ -57,6 +57,8 @@ class Piper:
     self._expected_bitrate = self._config.get("bitrate", 1000000)
     self._is_leader = self._config.get("is_leader", False)
 
+    self._leader_setup = leader_setup
+
     self._check_can_info()
 
     self._can_bus = can.interface.Bus(channel=self._can_channel_name, interface="socketcan")
@@ -175,6 +177,7 @@ class Piper:
     can_id:int = rx_message.arbitration_id
     can_data:bytearray = rx_message.data
 
+    # print(hex(can_id))
     match can_id:
       # arm and gripper joint angle feedback
       case CanIDPiper.ARM_STATUS_FEEDBACK.value:
@@ -226,7 +229,6 @@ class Piper:
           self._sensed[6] = _gripper_can_to_m(struct.unpack(">l", can_data[:4])[0])
           self._gripper_effort = struct.unpack(">h", can_data[4:6])[0]
           self._gripper_status = struct.unpack("B", can_data[6:7])[0]
-
 
   def _send_message(self, arbitration_id, data):
     message = can.Message(channel=self._can_channel_name,
