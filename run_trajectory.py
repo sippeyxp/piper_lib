@@ -14,7 +14,7 @@ flags.DEFINE_bool("mit_mode", True, "Whether to turn on the MIT mode")
 
 def main(argv):
   # testing code
-  piper = piper_lib.Piper()
+  piper = piper_lib.Piper(config={"can_name": "can0"})
   piper.start()
 
   piper.enable_motion()
@@ -53,7 +53,7 @@ def main(argv):
       metronome = piper_lib.Metronome(100)
       while True:
         t = metronome.t
-        joints_sensed = piper.sensed()
+        joints_sensed = piper.sensed_joints()
         joints_command = A * np.sin(w * t + np.array(phi)) + b
         piper.command_joints(joints_command)
 

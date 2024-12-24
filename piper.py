@@ -34,10 +34,28 @@ def _gripper_m_to_can(gripper_m) -> int:
 
 class Piper:
 
-  def __init__(self, can_name:str = "can0") -> None:
-    self._can_channel_name = can_name
+  DEFAULT_CONFIG = {
+    "can_name": "can0",
+    "bitrate": 1000000,
+    "is_leader": False,
+  }
+    
+  def __init__(self, config: dict = None) -> None:
+    """Initialize Piper robot interface.
+    
+    Args:
+        config: Configuration dictionary with the following optional keys:
+            - can_name: Name of the CAN interface (default: "can0")
+            - bitrate: Expected CAN bitrate in bps (default: 1000000)
+            - is_leader: Whether the arm is in set up as leader.
+    """
+    # Use default config if none provided, otherwise update defaults with provided config
+    self._config = self.DEFAULT_CONFIG | config
+
+    self._can_channel_name = self._config["can_name"]
     self._can_bus = None
-    self._expected_bitrate = 1000000
+    self._expected_bitrate = self._config.get("bitrate", 1000000)
+    self._is_leader = self._config.get("is_leader", False)
 
     self._check_can_info()
 
@@ -91,7 +109,7 @@ class Piper:
       print("CAN read thread joined")
 
     try:
-        can_bus.shutdown()  # 关闭 CAN 总线
+        can_bus.shutdown()
         # print("CAN bus connection properly shut down.")
     except AttributeError:
         print("CAN bus connection was not properly initialized.")
@@ -190,6 +208,26 @@ class Piper:
         self._mit_mode_read = struct.unpack("B", can_data[3:4])[0]
         self._residence_time = struct.unpack("B", can_data[0:1])[0]
 
+    if self._is_leader: # arm in leader setup send feedback as command.
+      match can_id:
+        case CanIDPiper.ARM_JOINT_CTRL_12.value:
+          self._sensed[0] = _joint_can_to_rad(struct.unpack(">l", can_data[:4])[0])
+          self._sensed[1] = _joint_can_to_rad(struct.unpack(">l", can_data[4:8])[0])
+          self._sensed_valid |= 1
+        case CanIDPiper.ARM_JOINT_CTRL_34.value:
+          self._sensed[2] = _joint_can_to_rad(struct.unpack(">l", can_data[:4])[0])
+          self._sensed[3] = _joint_can_to_rad(struct.unpack(">l", can_data[4:8])[0])
+          self._sensed_valid |= 2
+        case CanIDPiper.ARM_JOINT_CTRL_56.value:
+          self._sensed[4] = _joint_can_to_rad(struct.unpack(">l", can_data[:4])[0])
+          self._sensed[5] = _joint_can_to_rad(struct.unpack(">l", can_data[4:8])[0])
+          self._sensed_valid |= 4
+        case CanIDPiper.ARM_GRIPPER_CTRL.value:
+          self._sensed[6] = _gripper_can_to_m(struct.unpack(">l", can_data[:4])[0])
+          self._gripper_effort = struct.unpack(">h", can_data[4:6])[0]
+          self._gripper_status = struct.unpack("B", can_data[6:7])[0]
+
+
   def _send_message(self, arbitration_id, data):
     message = can.Message(channel=self._can_channel_name,
         arbitration_id=arbitration_id, 
@@ -205,7 +243,7 @@ class Piper:
     except can.CanError:
       print("send message failed")
 
-  def sensed(self):
+  def sensed_joints(self):
     return np.array(self._sensed)
 
   def get_arm_status(self):
@@ -238,7 +276,7 @@ class Piper:
     # CAN mode, joint control, speed 100
     self._mit_mode = mit
     self._send_message(
-            arbitration_id=0x151,
+            arbitration_id=CanIDPiper.ARM_MOTION_CTRL_2.value,
             data=bytearray([0x1, 0x1, 0x64, 0xAD if mit else 0x0, 0x0, 0x0, 0x0, 0x0]),
     )
 
@@ -247,7 +285,7 @@ class Piper:
     print("mit mode = ", self._mit_mode)
 
     self._send_message(
-            arbitration_id=0x151,
+            arbitration_id=CanIDPiper.ARM_MOTION_CTRL_2.value,
             data=bytearray([0x1, 0x1, 0x64, 0xAD if self._mit_mode else 0x0, 0x0, 0x0, 0x0, 0x0]),
     )
     # Without these sleep, sometime initial joint command is not accepted.
@@ -255,48 +293,42 @@ class Piper:
     time.sleep(.1)
 
     # Enable arm(7)
-    self._send_message(arbitration_id=0x471, data=bytearray([0x7, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0]))
+    self._send_message(arbitration_id=CanIDPiper.ARM_MOTOR_ENABLE_DISABLE_CONFIG.value, data=bytearray([0x7, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0]))
     time.sleep(.1)
 
     # Gripper ctrl, 0 open, 1000=1Nm, enable
-    self._send_message(arbitration_id=0x159, data=bytearray([0x0, 0x0, 0x0, 0x0, 0x3, 0xe8, 0x1, 0x0]))
+    self._send_message(arbitration_id=CanIDPiper.ARM_GRIPPER_CTRL.value, data=bytearray([0x0, 0x0, 0x0, 0x0, 0x3, 0xe8, 0x1, 0x0]))
     time.sleep(.1)
 
     # set motion ctrl 2 again
     self._send_message(
-            arbitration_id=0x151,
+            arbitration_id=CanIDPiper.ARM_MOTION_CTRL_2.value,
             data=bytearray([0x1, 0x1, 0x64, 0xAD if self._mit_mode else 0x0, 0x0, 0x0, 0x0, 0x0]),
     )
     time.sleep(.1)
 
   def disable_motion(self):
     # Diable arm (7)
-    self._send_message(arbitration_id=0x471, data=bytearray([0x7, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0]))
+    self._send_message(arbitration_id=CanIDPiper.ARM_MOTOR_ENABLE_DISABLE_CONFIG.value, data=bytearray([0x7, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0]))
 
     # Gripper ctrl: disable
-    self._send_message(arbitration_id=0x159, data=bytearray([0x0, 0x0, 0x0, 0x0, 0x3, 0xe8, 0x0, 0x0]))
+    self._send_message(arbitration_id=CanIDPiper.ARM_GRIPPER_CTRL.value, data=bytearray([0x0, 0x0, 0x0, 0x0, 0x3, 0xe8, 0x0, 0x0]))
 
   def command_joints(self, joints):
+    if self._is_leader:
+      print("leader arm does not accept joint command")
+      return
     assert len(joints) == 7
     self._commanded = np.array(joints)
 
-    # Setting this again is requested in piper official code, but does not seem to be necessary.
-    # CAN mode, joint control, speed 100
-    # print("mit mode = ", self._mit_mode)
-    # self._send_message(
-    #         arbitration_id=0x151,
-    #         data=bytearray([0x1, 0x1, 0x64, 0x0, 0xAD if self._mit_mode else 0x0, 0x0, 0x0, 0x0]),
-    # )
-
     arm_joints_can = [_joint_rad_to_can(i) for i in self._commanded[:6]]
-    self._send_message(arbitration_id=0x155, data=bytearray(struct.pack(">ll", arm_joints_can[0], arm_joints_can[1])))
-    self._send_message(arbitration_id=0x156, data=bytearray(struct.pack(">ll", arm_joints_can[2], arm_joints_can[3])))
-    self._send_message(arbitration_id=0x157, data=bytearray(struct.pack(">ll", arm_joints_can[4], arm_joints_can[5])))
+    self._send_message(arbitration_id=CanIDPiper.ARM_JOINT_CTRL_12.value, data=bytearray(struct.pack(">ll", arm_joints_can[0], arm_joints_can[1])))
+    self._send_message(arbitration_id=CanIDPiper.ARM_JOINT_CTRL_34.value, data=bytearray(struct.pack(">ll", arm_joints_can[2], arm_joints_can[3])))
+    self._send_message(arbitration_id=CanIDPiper.ARM_JOINT_CTRL_56.value, data=bytearray(struct.pack(">ll", arm_joints_can[4], arm_joints_can[5])))
 
     # Gripper ctrl, 0 open, 1000=1Nm, enable
     gripper_can = _gripper_m_to_can(self._commanded[6])
-    self._send_message(arbitration_id=0x159, data=bytearray(struct.pack(">l", gripper_can)) + bytearray([0x3, 0xe8, 0x1, 0x0]))
-
+    self._send_message(arbitration_id=CanIDPiper.ARM_GRIPPER_CTRL.value, data=bytearray(struct.pack(">l", gripper_can)) + bytearray([0x3, 0xe8, 0x1, 0x0]))
 
 class Metronome:
   """Simple timing class."""
