@@ -57,8 +57,6 @@ class Piper:
     self._expected_bitrate = self._config.get("bitrate", 1000000)
     self._is_leader = self._config.get("is_leader", False)
 
-    self._leader_setup = leader_setup
-
     self._check_can_info()
 
     self._can_bus = can.interface.Bus(channel=self._can_channel_name, interface="socketcan")
