@@ -1,4 +1,4 @@
-import pollo
+import pollo as pollo_lib
 import serial
 import time
 
@@ -16,7 +16,7 @@ def main(argv):
   del argv
   
   if FLAGS.mode == "joints":
-    pollo = pollo.PolloReceiver(config={"port": FLAGS.port, "baudrate": FLAGS.baudrate})
+    pollo = pollo_lib.PolloReceiver(config={"port": FLAGS.port, "baudrate": FLAGS.baudrate})
 
     while True:
       joints = pollo.sensed_joints()
