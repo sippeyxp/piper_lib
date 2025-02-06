@@ -13,7 +13,9 @@ class PolloReceiver:
   DEFAULT_CONFIG = {
     "port": "/dev/ttyACM0",
     "baudrate": 115200,
-    "int_zeros": [0x750,0xfff,0xfff,0x880,0x850,0x850,0x300],
+    # 80b,f37,f9b,66d,919,81a,a9e
+    #"int_zeros": [0x80b,0xf37,0xf9b,0x66d,0x919,0x81a,0x300],
+    "int_zeros":  [0x7b9,0xfff,0xfae,0x717,0x8f9,0xcbe,0x000],
     "k_conv": [
       -np.deg2rad(300)/4096*0.66, 
       -np.deg2rad(300)/4096*0.66, 
@@ -21,7 +23,7 @@ class PolloReceiver:
       -np.deg2rad(300)/4096*0.66, 
       np.deg2rad(300)/4096*0.66, 
       -np.deg2rad(300)/4096*0.66,
-      0.08/3000
+      0.09/3000
     ]
   }
 

@@ -26,7 +26,8 @@ def main(argv):
     serial_conn = serial.Serial(FLAGS.port, FLAGS.baudrate, timeout=0.01)
     while True:
       line = serial_conn.readline()
-      print(line.decode("utf-8").rstrip("\n"))
+      if line:
+        print(line.decode("utf-8").rstrip("\n"))
 
 if __name__ == "__main__":
   app.run(main)

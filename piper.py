@@ -330,30 +330,52 @@ class Piper:
     gripper_can = _gripper_m_to_can(self._commanded[6])
     self._send_message(arbitration_id=CanIDPiper.ARM_GRIPPER_CTRL.value, data=bytearray(struct.pack(">l", gripper_can)) + bytearray([0x3, 0xe8, 0x1, 0x0]))
 
+
 class Metronome:
   """Simple timing class."""
 
   def __init__(self, freq):
-    self._tick = 1/freq
+    """Initialize metronome with given frequency.
+
+    Args:
+        freq: Frequency in Hz to tick at.
+    """
+    self._tick_t = 1/freq
+    self._t0 = None
+    self._next_t = None
     self.reset()
 
   def reset(self):
+    """Reset metronome timing to zero."""
     self._t0 = time.time()
-    self._next_t = self._tick
+    self._next_t = self._tick_t
     self._tick_i = 0
 
   @property
   def t(self):
+    """Get current time since start in seconds."""
     return time.time() - self._t0
 
   @property
   def i(self):
+    """Get current tick count."""
     return self._tick_i
 
-  def wait(self):
+  def wait(self, catch_up=False):
+    """Wait for next beat.
+
+    Args:
+        catch_up: If True, skips beats to catch up if running behind.
+               If False, maintains fixed intervals even if running behind.
+
+    Returns:
+        Current time since start in seconds.
+    """
     while self.t < self._next_t:
-      time.sleep(self._tick / 10)
-    self._next_t += self._tick
+      time.sleep(self._tick_t / 10)
+    if catch_up:
+      self._next_t += self._tick_t
+    else:
+      self._next_t = self.t + self._tick_t
     self._tick_i += 1
     return self.t
-

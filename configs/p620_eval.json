@@ -1,0 +1,17 @@
+{
+  "camera": {
+    "camera_name": "right_wrist_cam",
+    "camera_id": 0,
+    "fps": 30,
+    "auto_exposure": 1,
+    "exposure": 150,
+    "gain": 20,
+    "display": false
+  },
+  "robot": {
+    "piper": {
+      "can_name": "can0",
+      "bitrate": 1000000
+    }
+  }
+}

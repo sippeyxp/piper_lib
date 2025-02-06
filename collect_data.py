@@ -1,7 +1,6 @@
 """Collects data from the robot."""
 
 import json
-import time
 
 from absl import app
 from absl import flags
@@ -27,10 +26,16 @@ def main(argv):
 
   with open(FLAGS.config_file, "r") as f:
     config = json.load(f)
+  # set up camera group from config
+  camera_config = config.get("cameras", config.get("camera", None))
+  if not camera_config:
+    raise RuntimeError("Cannot find valid camera config")
+  camera_group = teleop_lib.CameraGroupController(
+    camera_configs=camera_config,
+    logger=logger
+  )
+  camera_group.start()
 
-  # set up camera from
-  camera = teleop_lib.CameraController(config=config["camera"], logger=logger)
-  camera.start()
   teleop = teleop_lib.TeleopController(config=config["teleop"], logger=logger)
 
   while True:
@@ -44,12 +49,18 @@ def main(argv):
 
     if init_ok:
       teleop.engage()
+      print("Press mid pedal to start episode")
+      try:
+        with Listener(on_press=lambda key: key != Key.tab) as listener:
+          listener.join()
+      except KeyboardInterrupt:
+        break
 
       with logger.create_episode() as episode:
         print("Recording started \a")
         episode.set_attribute("task", FLAGS.task)
+        episode.set_attribute("cameras", camera_group.names)
         try:
-          # time.sleep(FLAGS.max_episode_length_sec)  # Max episode length
           success = [None]
           def on_press(key):
             if key == Key.backspace:
@@ -61,19 +72,18 @@ def main(argv):
           with Listener(on_press=on_press) as listener:
             listener.join()
         except KeyboardInterrupt:
-          pass
+          success[0] = None
+          break
         finally:
           teleop.disengage()
-          
-          #success = None
-          #while success not in ("y", "n"):
-          #  success = input("Success (y/n): ").lower()
+
           print("success = ", success[0])
           success = success[0]
           episode.set_attribute("success", success)
+
+  camera_group.stop()
   teleop.move_follower_to_rest()
   teleop.close()
-  camera.stop()
 
 if __name__ == "__main__":
   app.run(main)

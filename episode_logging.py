@@ -1,5 +1,6 @@
 """Event level logging for teleoperation episodes."""
 
+import logging
 import cv2
 import dataclasses
 import datetime
@@ -168,8 +169,10 @@ class EpisodeContext:
     """
     camera_name = event.event_name
     if camera_name not in self._video_recorder:
+      # print("New camera stream", camera_name)
       video_path = os.path.join(self._episode_dir, f"{camera_name}.mp4")
       self._video_recorder[camera_name] = VideoRecorder(video_path)
+      logging.debug("Start regording new camera stream %s", camera_name)
 
     frame_id = self._video_recorder[camera_name].add_frame(event.image)
     event_copy = dataclasses.replace(event)
@@ -268,5 +271,5 @@ class Logger:
     """
     with self._context_lock:
       if self._current_context is not context:
-        raise RuntimeError("Cannot detach")
+        raise RuntimeError("Cannot detach. Attached to a different context.")
       self._current_context = None

@@ -18,7 +18,7 @@ def _int64_feature(value):
   """Returns an int64_list from a bool / enum / int / uint."""
   return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
 
-def serialize_example(observation, action, valid, task):
+def serialize_example(observation, action, valid, task, camera_names):
     """
     Creates a tf.train.Example message ready to be written to a file.
     """
@@ -29,24 +29,23 @@ def serialize_example(observation, action, valid, task):
       return encoded.tobytes()
 
     feature = {
-        'observation/right_wrist_cam': _bytes_feature(cv2_image_encode(observation["right_wrist_cam"])),
         'observation/joints_pos': _float_feature(observation["joints_pos"].tolist()),
         'action': _float_feature(action.flatten().tolist()),
         'valid': _int64_feature(valid.tolist()),
         'task': _bytes_feature(task.encode()),
+    } | {
+        f'observation/{name}': _bytes_feature(cv2_image_encode(observation[name])) for name in camera_names
     }
 
     # Create a Features message using tf.train.Example.
-
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
 
 
-
-def write_data_generator_to_file(data, filename):
-    with tf.io.TFRecordWriter(filename) as writer:
+def write_data_generator_to_file(data, filename, camera_names=("right_wrist_cam",)):
+   with tf.io.TFRecordWriter(filename) as writer:
         for item in data:
-            example = serialize_example(item["observation"], item["action"], item["valid"])
+            example = serialize_example(item["observation"], item["action"], item["valid"], camera_names=camera_names)
             writer.write(example)
 
 
@@ -64,10 +63,9 @@ def get_parse_function(camera_names=("right_wrist_cam",), n_joints=7, chunk_size
       data = tf.io.parse_single_example(example_proto, feature_description)
       example = {
           "observation": {
-              "right_wrist_cam": tf.io.decode_png(data["observation/right_wrist_cam"]),
               "joints_pos": data["observation/joints_pos"],
             } | {
-              name: tf.io.decode_png(data[f"observation/{name}"]) for name in camera_names
+              name: tf.io.decode_jpg(data[f"observation/{name}"]) for name in camera_names
             },
           "action": data["action"],
           "valid": data["valid"],

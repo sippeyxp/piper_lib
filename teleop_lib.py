@@ -2,7 +2,7 @@
 
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import cv2
 import numpy as np
@@ -80,12 +80,22 @@ class CameraController:
     self._thread = None
     self._running = False
 
+  @property
+  def name(self):
+    return self._camera_name
+
   def _set_camera_property(self):
     # Set camera properties from config
+    # Reference https://stackoverflow.com/questions/54365170/exposure-mode-opencv-4-0-1
+    auto_exposure = 3
+    manual_exposure = 1
+
     self._cap.set(cv2.CAP_PROP_FPS, self._config["fps"])
-    self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, self._config["auto_exposure"])
-    self._cap.set(cv2.CAP_PROP_EXPOSURE, self._config["exposure"])
-    self._cap.set(cv2.CAP_PROP_GAIN, self._config["gain"])
+    self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, auto_exposure if self._config.get("auto_exposure", True) else manual_exposure)
+    if self._config.get("exposure", None) is not None:
+      self._cap.set(cv2.CAP_PROP_EXPOSURE, self._config["exposure"])
+    if self._config.get("gain", None) is not None:
+      self._cap.set(cv2.CAP_PROP_GAIN, self._config["gain"])
     
     # Print actual settings
     print(f"Camera {self._camera_name} settings:")
@@ -100,7 +110,7 @@ class CameraController:
     self._thread = threading.Thread(target=self._capture_thread)
     self._thread.daemon = True
 
-    if self._config["display"]:
+    if self._config.get("display"):
       # Create window for display
       cv2.namedWindow(self._camera_name, cv2.WINDOW_NORMAL)
     self._thread.start()
@@ -137,6 +147,49 @@ class CameraController:
           cv2.imshow(self._camera_name, frame)
           cv2.waitKey(1)  # Required to update window
       time.sleep(0.001)
+
+
+class CameraGroupController:
+    """Controls a group of cameras together.
+
+    This class manages multiple CameraController instances as a coordinated group,
+    providing unified start/stop functionality.
+    """
+    def __init__(self, camera_configs: Union[list[dict], dict], logger: episode_logging.Logger):
+        """Initialize camera group controller.
+
+        Args:
+            camera_configs: List of camera configuration dictionaries
+            logger: Logger instance for recording camera frames
+        """
+        self._controllers = []
+        if isinstance(camera_configs, dict):
+          camera_configs = [camera_configs]
+        for config in camera_configs:
+            controller = CameraController(
+                config=config,
+                logger=logger
+            )
+            self._controllers.append(controller)
+
+    def start(self):
+        """Start all cameras in the group."""
+        for controller in self._controllers:
+            controller.start()
+
+    def stop(self):
+        """Stop all cameras and release resources."""
+        for controller in self._controllers:
+            controller.stop()
+
+    @property
+    def names(self):
+        """Get list of camera names in the group.
+
+        Returns:
+            list[str]: List of camera names
+        """
+        return [c.name for c in self._controllers]
 
 
 class TeleopController:
@@ -183,9 +236,10 @@ class TeleopController:
       joints = self._pollo.sensed_joints()
       self._piper.command_joints(joints * i / 100)
       time.sleep(0.01)
-    for i in range(50):
+    for i in range(10):
       joints = self._pollo.sensed_joints()
       self._piper.command_joints(joints)
+      time.sleep(0.01)
     print("matching done")
 
     self._thread = threading.Thread(target=self.run_control_loop)

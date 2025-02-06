@@ -2,4 +2,4 @@ __pycache__/
 *.swp
 *.swo
 log.txt
-model/
+model

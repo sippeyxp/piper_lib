@@ -17,10 +17,6 @@ from absl import app
 import piper as piper_lib
 import time
 import numpy as np
-import threading
-import serial
-import sys
-
 
 
 def ensure_joints_synced(piper_leads, pipers):
@@ -66,9 +62,9 @@ def main(argv):
   print("leaders started")
 
 
-  piper_left = piper_lib.Piper(config={"can_name": "can_lf", "is_leader": False}
+  piper_left = piper_lib.Piper(config={"can_name": "can_lf", "is_leader": False})
   piper_left.start()
-  piper_right = piper_lib.Piper(config={"can_name": "can_rf", "is_leader": False}
+  piper_right = piper_lib.Piper(config={"can_name": "can_rf", "is_leader": False})
   piper_right.start()
   print("follower started")
 
@@ -79,7 +75,7 @@ def main(argv):
   print("follower zeroed")
 
   # Sync joints before start
-  ensure_joints_synced(piper_lead, piper)
+  ensure_joints_synced([piper_left_lead, piper_right_lead], [piper_left, piper_right])
 
   piper_left.enter_mit_mode()
   piper_right.enter_mit_mode()
@@ -87,25 +83,26 @@ def main(argv):
   try:
     metronome = piper_lib.Metronome(100)
     while True:
-      # joints = pollo.get_reading()
       left_joints = piper_left_lead.sensed_joints()
       right_joints = piper_right_lead.sensed_joints()
       piper_left.command_joints(left_joints)
       piper_right.command_joints(right_joints)
       metronome.wait() 
   except KeyboardInterrupt:
-    left_piper.enter_mit_mode(False) # exit mit mode
-    right_piper.enter_mit_mode(False) # exit mit mode
+    piper_left.enter_mit_mode(False) # exit mit mode
+    piper_right.enter_mit_mode(False) # exit mit mode
     rest_joints = np.zeros(7)
     rest_joints[4] = 0.3
-    left_piper.command_joints(rest_joints)
-    right_piper.command_joints(rest_joints)
+    piper_left.command_joints(rest_joints)
+    piper_right.command_joints(rest_joints)
     time.sleep(1.5)
 
-  left_piper.disable_motion()
-  left_piper.close()
-  right_piper.disable_motion()
-  right_piper.close()
+  piper_left.disable_motion()
+  piper_left.close()
+  piper_right.disable_motion()
+  piper_right.close()
+  piper_left_lead.close()
+  piper_right_lead.close()
 
 if __name__ == "__main__":
     app.run(main)
