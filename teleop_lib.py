@@ -11,32 +11,46 @@ from absl import app
 import piper as piper_lib
 import episode_logging
 import pollo
+from timing import Metronome
 
 
-def ensure_joints_synced(pollo: pollo.PolloReceiver, piper: piper_lib.Piper, match_piper_to_pollo=True):
-  # make sure pollo is not too far from zero
-  n = 0
-  nn = 0
-  while True:
-    joints = pollo.sensed_joints()
-    if nn % 20 == 0:
-      print("pollo", " ".join(f"{i:.2f}" for i in joints))
-    if np.all(np.abs(joints[:3]) < 0.3) and np.all(np.abs(joints[3:6]) < 0.5):
-      n += 1
-    else:
-      n = 0
-    if n > 100:
-      break
-    time.sleep(0.01)
-    nn += 1
+def ensure_joints_synced(
+    pairs: list[tuple[pollo.PolloReceiver, piper_lib.Piper]],
+    match_piper_to_pollo=True
+):
+    """Ensure all pollo arms are near zero and optionally match all pipers to pollos.
 
-  print("pollo zeroed.")
-  if match_piper_to_pollo:
-    for i in range(100):
-      joints = pollo.get_reading()
-      piper.command_joints(joints * i / 100)
-      time.sleep(0.01)
-    print("started")
+    Args:
+        pairs: List of (PolloReceiver, Piper) tuples
+        match_piper_to_pollo: If True, move pipers to match pollos after sync
+    """
+    n = [0 for _ in pairs]
+    nn = 0
+    while True:
+        all_synced = True
+        for idx, (pollo_inst, _) in enumerate(pairs):
+            joints = pollo_inst.sensed_joints()
+            if nn % 20 == 0:
+                print(f"pollo[{idx}]", " ".join(f"{i:.2f}" for i in joints))
+            if np.all(np.abs(joints[:3]) < 0.3) and np.all(np.abs(joints[3:6]) < 0.5):
+                n[idx] += 1
+            else:
+                n[idx] = 0
+            if n[idx] <= 100:
+                all_synced = False
+        if all_synced:
+            break
+        time.sleep(0.01)
+        nn += 1
+
+    print("All pollos zeroed.")
+    if match_piper_to_pollo:
+        for i in range(100):
+            for pollo_inst, piper_inst in pairs:
+                joints = pollo_inst.get_reading()
+                piper_inst.command_joints(joints * i / 100)
+            time.sleep(0.01)
+        print("started")
 
 
 class CameraController:
@@ -195,50 +209,64 @@ class CameraGroupController:
 class TeleopController:
   """Controls teleoperation functionality between leader and follower robots.
   
-  This class manages the interaction between the leader (Pollo) and follower (Piper)
-  robots, handling initialization, engagement, and control loop execution.
+  This class manages the interaction between one or more leader (Pollo) and follower (Piper)
+  robot pairs, handling initialization, engagement, and control loop execution.
   """
-  def __init__(self, config: dict[str, Any], logger: episode_logging.Logger):
+  def __init__(self, config: dict[str, Any] | list[dict[str, Any]], logger: episode_logging.Logger):
     """Initialize the teleoperation controller.
 
     Args:
+      config: Either a dict for a single pair, or a list of dicts for multiple pairs.
       logger: Logger instance for recording robot states and events.
     """
-    self._pollo = pollo.PolloReceiver(config=config["pollo"])
-    self._piper = piper_lib.Piper(config=config["piper"])
     self._logger = logger
     self._running = False
     self._thread = None
 
+    # Support both single and multiple pairs
+    if isinstance(config, dict):
+      config = [config]
+
+    self._pairs = []
+    for pair_cfg in config:
+      pollo_inst = pollo.PolloReceiver(config=pair_cfg["pollo"])
+      piper_inst = piper_lib.Piper(config=pair_cfg["piper"])
+      self._pairs.append((pollo_inst, piper_inst))
+
   def move_follower_to_init(self):
-    """Move the follower robot to its initial position."""
-    self._piper.start()
-    self._piper.enable_motion()
-    self._piper.command_joints(np.zeros(7))
+    """Move all follower robots to their initial positions."""
+    ## revisit
+    for _, piper in self._pairs:
+      piper.start()
+      piper.enable_motion()
+      piper.command_joints(np.zeros(7))
 
   def wait_leader_to_init(self):
-    """Wait for the leader robot to reach its initial position."""
-    ensure_joints_synced(self._pollo, self._piper, match_piper_to_pollo=False)
+    """Wait for all leader robots to reach their initial positions."""
+    ensure_joints_synced(self._pairs, match_piper_to_pollo=False)
 
   def engage(self):
-    """Start teleoperation by engaging both robots.
+    """Start teleoperation by engaging all robot pairs.
     
     This method:
-    1. Enables MIT mode on the follower
+    1. Enables MIT mode on all followers
     2. Gradually matches follower position to leader
     3. Starts the control loop thread
     """
     self._running = True
-    self._piper.enter_mit_mode()
+    for _, piper in self._pairs:
+      piper.enter_mit_mode()
     print("matching joint")
     # assume engage with joint near 0
     for i in range(100):
-      joints = self._pollo.sensed_joints()
-      self._piper.command_joints(joints * i / 100)
+      for pollo_inst, piper_inst in self._pairs:
+        joints = pollo_inst.sensed_joints()
+        piper_inst.command_joints(joints * i / 100)
       time.sleep(0.01)
     for i in range(10):
-      joints = self._pollo.sensed_joints()
-      self._piper.command_joints(joints)
+      for pollo_inst, piper_inst in self._pairs:
+        joints = pollo_inst.sensed_joints()
+        piper_inst.command_joints(joints)
       time.sleep(0.01)
     print("matching done")
 
@@ -247,69 +275,84 @@ class TeleopController:
     self._thread.start()
 
   def disengage(self):
-    """Stop teleoperation by disengaging both robots.
+    """Stop teleoperation by disengaging all robot pairs.
     
     This method:
     1. Stops the control loop
-    2. Gradually moves follower back to zero position
+    2. Gradually moves all followers back to zero position
     3. Exits MIT mode
     """
     self._running = False
     if self._thread:
       self._thread.join()
-    j0 = self._piper.sensed_joints()
+    j0s = [piper.sensed_joints() for _, piper in self._pairs]
     for i in np.arange(1, 0, -0.01):
-      self._piper.command_joints(j0 * i)
+      for idx, (_, piper) in enumerate(self._pairs):
+        piper.command_joints(j0s[idx] * i)
       time.sleep(0.01)
-    for i in range(100):
-      self._piper.command_joints(j0 * 0)
+    for _ in range(100):
+      for idx, (_, piper) in enumerate(self._pairs):
+        piper.command_joints(j0s[idx] * 0)
       time.sleep(0.01)
-    self._piper.enter_mit_mode(False)
+    for _, piper in self._pairs:
+      piper.enter_mit_mode(False)
 
   def move_follower_to_rest(self):
-    """Move the follower robot to its rest position."""
+    """Move all follower robots to their rest positions."""
     rest_joints = np.zeros(7)
     rest_joints[4] = 0.3
-    self._piper.command_joints(rest_joints)
+    for _, piper in self._pairs:
+      piper.command_joints(rest_joints)
     time.sleep(1.5)
 
   def close(self):
-    """Clean up resources and close connections to both robots."""
+    """Clean up resources and close connections to all robots."""
     if self._running:
       self.disengage()
-    self._piper.disable_motion()
-    self._piper.close()
-    self._pollo.close()
+    for pollo_inst, piper_inst in self._pairs:
+      piper_inst.disable_motion()
+      piper_inst.close()
+      pollo_inst.close()
 
   def run_control_loop(self):
-    """Main control loop that runs teleoperation.
+    """Main control loop that runs teleoperation for all pairs.
     
     Continuously:
-    1. Reads joint positions from leader
-    2. Commands follower to match positions
-    3. Logs commanded and observed joint positions
+    1. Reads joint positions from each leader
+    2. Commands each follower to match positions
+    3. Logs commanded and observed joint positions for each pair
     """
-    metronome = piper_lib.Metronome(100)
+    metronome = Metronome(100)
     while self._running:
       ts = time.time_ns()
-      joints = self._pollo.sensed_joints()
-      joints[6] = np.clip(joints[6], 0, 0.08)
-      self._piper.command_joints(joints)
-      
-      event = episode_logging.LogEvent(
-        timestamp_ns=ts,
-        event_type=episode_logging.EventType.JOINT_POSITION,
-        event_name="commanded",
-        joint_pos=joints.tolist()
-      )
-      self._logger.log_event(event)
+      # Gather and clip joints from all pollos
+      observed_joints = []
+      for pollo_inst, _ in self._pairs:
+        joints = pollo_inst.sensed_joints()
+        observed_joints.append(joints.copy())
 
-      event = episode_logging.LogEvent(
+      # Command all pipers with their respective joints
+      ts_commanded = time.time_ns()
+      for idx, (_, piper_inst) in enumerate(self._pairs):
+        piper_inst.command_joints(observed_joints[idx])
+
+      # Log concatenated commanded joints
+      concat_observed = [item for joints in observed_joints for item in joints]
+      observed_event = episode_logging.LogEvent(
         timestamp_ns=ts,
         event_type=episode_logging.EventType.JOINT_POSITION,
         event_name="observed",
-        joint_pos=self._piper.sensed_joints().tolist()
+        joint_pos=concat_observed,
       )
-      self._logger.log_event(event)
-      
+      concat_commanded = [item for joints in observed_joints for item in joints]
+      commanded_event = episode_logging.LogEvent(
+        timestamp_ns=ts_commanded,
+        event_type=episode_logging.EventType.JOINT_POSITION,
+        event_name="commanded",
+        joint_pos=concat_commanded,
+      )
+
+      self._logger.log_event(observed_event)
+      self._logger.log_event(commanded_event)
+
       metronome.wait()

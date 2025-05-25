@@ -10,6 +10,7 @@ import numpy as np
 import threading
 import serial
 import sys
+from timing import Metronome
 
 
 
@@ -55,7 +56,7 @@ def main(argv):
   piper.enter_mit_mode()
 
   try:
-    metronome = piper_lib.Metronome(100)
+    metronome = Metronome(100)
     while True:
       # joints = pollo.get_reading()
       joints = piper_lead.sensed()

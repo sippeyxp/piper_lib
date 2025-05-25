@@ -17,6 +17,7 @@ from absl import app
 import piper as piper_lib
 import time
 import numpy as np
+from timing import Metronome
 
 
 def ensure_joints_synced(piper_leads, pipers):
@@ -54,7 +55,6 @@ def ensure_joints_synced(piper_leads, pipers):
 
 
 def main(argv):
-  # pollo = PolloReceiver()
   piper_left_lead = piper_lib.Piper(config={"can_name": "can_ll", "is_leader": True})
   piper_left_lead.start()
   piper_right_lead = piper_lib.Piper(config={"can_name": "can_rl", "is_leader": True})
@@ -81,7 +81,7 @@ def main(argv):
   piper_right.enter_mit_mode()
 
   try:
-    metronome = piper_lib.Metronome(100)
+    metronome = Metronome(100)
     while True:
       left_joints = piper_left_lead.sensed_joints()
       right_joints = piper_right_lead.sensed_joints()

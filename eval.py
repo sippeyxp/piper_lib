@@ -18,6 +18,7 @@ import numpy as np
 import sys
 import teleop_lib
 import episode_logging
+from timing import Metronome
 
 from model import easy_policy
 
@@ -120,7 +121,7 @@ def main(argv):
   policy.reset()
 
   try:
-    metronome = piper_lib.Metronome(FLAGS.control_freq_hz)
+    metronome = Metronome(FLAGS.control_freq_hz)
 
     with frame_grabber_and_logger.create_episode() as episode:
       # episode.set_attribute("task", FLAGS.task)

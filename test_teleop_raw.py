@@ -9,6 +9,7 @@ import piper as piper_lib
 import time
 import numpy as np
 import pollo as pollo_lib
+from timing import Metronome
 
 
 def _ensure_joints_synced(pollo: pollo_lib.PolloReceiver, piper: piper_lib.Piper, match_piper_to_pollo=True):
@@ -51,7 +52,7 @@ def main(argv):
   piper.enter_mit_mode()
 
   try:
-    metronome = piper_lib.Metronome(100)
+    metronome = Metronome(100)
     while True:
       joints = pollo.sensed_joints()
       piper.command_joints(joints)

@@ -3,6 +3,7 @@ from absl import flags
 import piper as piper_lib
 import numpy as np
 import time
+from timing import Metronome
 
 
 FLAGS = flags.FLAGS
@@ -50,7 +51,7 @@ def main(argv):
 
   try:
     with open(FLAGS.log_file, "w") as f:
-      metronome = piper_lib.Metronome(100)
+      metronome = Metronome(100)
       while True:
         t = metronome.t
         joints_sensed = piper.sensed_joints()
