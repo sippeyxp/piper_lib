@@ -1,0 +1,86 @@
+{
+  "cameras": [
+    {
+      "camera_name": "overhead_cam",
+      "camera_id": 0,
+      "fps": 30,
+      "auto_exposure": 1,
+      "exposure": 150,
+      "gain": 1,
+      "display": false
+    },
+    {
+      "camera_name": "left_wrist_cam",
+      "camera_id": 2,
+      "fps": 30,
+      "auto_exposure": 1,
+      "exposure": 150,
+      "gain": 1,
+      "saturation": 80,
+      "flip": -1,
+      "display": false
+    },
+    {
+      "camera_name": "right_wrist_cam",
+      "camera_id": 4,
+      "fps": 30,
+      "auto_exposure": 1,
+      "exposure": 150,
+      "gain": 1,
+      "saturation": 80,
+      "flip": -1,
+      "display": false
+    },
+    {
+      "camera_name": "wormeye_cam",
+      "camera_id": 6,
+      "fps": 30,
+      "auto_exposure": 1,
+      "exposure": 150,
+      "gain": 1,
+      "saturation": 80,
+      "brightness": 80,
+      "flip": -1,
+      "display": false
+    }
+  ],
+  "teleop": [{
+    "pollo": {
+      "port": "/dev/serial/by-id/usb-Texas_Instruments_In-Circuit_Debug_Interface_0E228901-if00",
+      "baudrate": 115200,
+      "int_zeros": [2253, 20, 21, 2118, 1928, 1923, 2050],
+      "k_conv": [
+        -0.0008436, 
+        0.0008436, 
+        -0.0008436, 
+        -0.0008436, 
+        -0.0008436, 
+        -0.0008436,
+        0.00016
+      ]
+    },
+    "piper": {
+      "can_name": "can0",
+      "bitrate": 1000000
+    }
+  },{
+    "pollo": {
+      "port": "/dev/serial/by-id/usb-Texas_Instruments_In-Circuit_Debug_Interface_0E2288DD-if00",
+      "baudrate": 115200,
+      "int_zeros": [1930, 3993, 4016, 1657, 1942, 2886, 1627],
+      "k_conv": [
+        0.0008436, 
+        -0.0008436, 
+        0.0008436, 
+        -0.0008436, 
+        0.0008436, 
+        -0.0008436,
+        0.00016
+      ]
+    },
+    "piper": {
+      "can_name": "can1",
+      "bitrate": 1000000
+    }
+  }]
+}

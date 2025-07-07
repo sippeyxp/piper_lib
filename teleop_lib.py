@@ -66,7 +66,7 @@ class CameraController:
     "fps": 30,
     "auto_exposure": 1,  # manual mode
     "exposure": 150,     # unit 100 us
-    "gain": 100         # gain
+
   }
   
   def __init__(self, config: dict[str, Any], logger: episode_logging.Logger):
@@ -80,6 +80,9 @@ class CameraController:
         - auto_exposure: Auto exposure mode (1 for manual)
         - exposure: Exposure time in 100us units
         - gain: Camera gain
+        - saturation: Camera saturation
+        - brightness: Camera brightness
+        - flip: OpenCV flip code (0=vertical, 1=horizontal, -1=both, None=none)
       logger: Logger instance to record captured frames
     """
     # Use default config if none provided, otherwise update defaults with provided config
@@ -93,6 +96,13 @@ class CameraController:
     self._logger = logger
     self._thread = None
     self._running = False
+
+    # Validate and store flip code for use in capture thread
+    flip = self._config.get("flip", None)
+    if flip is not None:
+      if flip not in (0, 1, -1):
+        raise ValueError(f"Invalid flip code '{flip}' for camera '{self._camera_name}'. Must be 0 (vertical), 1 (horizontal), -1 (both), or None.")
+    self._flip_code = flip
 
   @property
   def name(self):
@@ -110,6 +120,10 @@ class CameraController:
       self._cap.set(cv2.CAP_PROP_EXPOSURE, self._config["exposure"])
     if self._config.get("gain", None) is not None:
       self._cap.set(cv2.CAP_PROP_GAIN, self._config["gain"])
+    if self._config.get("saturation", None) is not None:
+      self._cap.set(cv2.CAP_PROP_SATURATION, self._config["saturation"])
+    if self._config.get("brightness", None) is not None:
+      self._cap.set(cv2.CAP_PROP_BRIGHTNESS, self._config["brightness"])
     
     # Print actual settings
     print(f"Camera {self._camera_name} settings:")
@@ -117,6 +131,8 @@ class CameraController:
     print(f"  Auto exposure: {self._cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)}")
     print(f"  Exposure: {self._cap.get(cv2.CAP_PROP_EXPOSURE)}")
     print(f"  Gain: {self._cap.get(cv2.CAP_PROP_GAIN)}")
+    print(f"  Saturation: {self._cap.get(cv2.CAP_PROP_SATURATION)}")
+    print(f"  Brightness: {self._cap.get(cv2.CAP_PROP_BRIGHTNESS)}")
 
   def start(self):
     """Start the camera capture thread."""
@@ -137,7 +153,7 @@ class CameraController:
       self._thread = None
     self._cap.release()
 
-    if self._config["display"]:
+    if self._config.get("display"):
       cv2.destroyWindow(self._camera_name)
 
   def _capture_thread(self):
@@ -149,6 +165,9 @@ class CameraController:
     while self._running:
       ret, frame = self._cap.read()
       if ret:
+        # Apply flip if specified
+        if self._flip_code is not None:
+          frame = cv2.flip(frame, self._flip_code)
         event = episode_logging.LogEvent(
           timestamp_ns=time.time_ns(),
           event_type=episode_logging.EventType.IMAGE,
@@ -156,7 +175,7 @@ class CameraController:
           image=frame
         )
         self._logger.log_event(event)
-        if self._config["display"]:
+        if self._config.get("display"):
           # Display frame
           cv2.imshow(self._camera_name, frame)
           cv2.waitKey(1)  # Required to update window
@@ -294,8 +313,10 @@ class TeleopController:
       for idx, (_, piper) in enumerate(self._pairs):
         piper.command_joints(j0s[idx] * 0)
       time.sleep(0.01)
-    for _, piper in self._pairs:
-      piper.enter_mit_mode(False)
+    # TODO: fix this properly.
+    # In 1.5.7 hardware, switching off mit mode is causes disabling of the robot.
+    # for _, piper in self._pairs:
+    #   piper.enter_mit_mode(False)
 
   def move_follower_to_rest(self):
     """Move all follower robots to their rest positions."""

@@ -37,9 +37,11 @@ class FrameGrabber:
             
     def get_frames(self):
         frames = {}
-        for camera_name, buffer in self._frame_buffers.items():
+        camera_names = list(self._frame_buffers.keys())
+        for camera_name in camera_names:
             with self._locks[camera_name]:
-                if buffer:  # If buffer is not empty
+                buffer = self._frame_buffers[camera_name]
+                if buffer:  # If buffer is not emptyz
                     frames[camera_name] = list(buffer)  # Get all frames in buffer
                     buffer.clear()  # Clear buffer after getting frames
         return frames
@@ -89,7 +91,7 @@ def main(argv):
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-                
+
     except KeyboardInterrupt:
         print("\nStopping cameras...")
     
