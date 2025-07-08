@@ -163,7 +163,6 @@ def main(argv):
   os.makedirs(FLAGS.output_dir, exist_ok=True)
   with tf.io.TFRecordWriter(os.path.join(FLAGS.output_dir, "featurized_data.tfrec")) as writer:
     for item in all_examples():
-      # import pdb; pdb.set_trace()
       example = tfexample_io.serialize_example(
               observation=item["observation"],
               action=item["action"],

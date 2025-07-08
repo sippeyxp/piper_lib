@@ -347,25 +347,29 @@ class TeleopController:
     while self._running:
       ts = time.time_ns()
       # Gather and clip joints from all pollos
-      observed_joints = []
-      for pollo_inst, _ in self._pairs:
-        joints = pollo_inst.sensed_joints()
-        observed_joints.append(joints.copy())
+      leader_joints = []
+      follower_joints = []
+      for pollo_inst, piper_inst in self._pairs:
+        pollo_joints = pollo_inst.sensed_joints()
+        leader_joints.append(pollo_joints.copy())
+
+        piper_joints = piper_inst.sensed_joints()
+        follower_joints.append(piper_joints.copy())
 
       # Command all pipers with their respective joints
       ts_commanded = time.time_ns()
       for idx, (_, piper_inst) in enumerate(self._pairs):
-        piper_inst.command_joints(observed_joints[idx])
+        piper_inst.command_joints(leader_joints[idx])
 
       # Log concatenated commanded joints
-      concat_observed = [item for joints in observed_joints for item in joints]
+      concat_observed = [item for joints in follower_joints for item in joints]
       observed_event = episode_logging.LogEvent(
         timestamp_ns=ts,
         event_type=episode_logging.EventType.JOINT_POSITION,
         event_name="observed",
         joint_pos=concat_observed,
       )
-      concat_commanded = [item for joints in observed_joints for item in joints]
+      concat_commanded = [item for joints in leader_joints for item in joints]
       commanded_event = episode_logging.LogEvent(
         timestamp_ns=ts_commanded,
         event_type=episode_logging.EventType.JOINT_POSITION,
